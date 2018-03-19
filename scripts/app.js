@@ -50,9 +50,17 @@
     var selected = select.options[select.selectedIndex];
     var key = selected.value;
     var label = selected.textContent;
+
     // TODO init the app.selectedCities array here
-    app.getForecast(key, label);
+    if (!app.selectedCities) {
+      app.selectedCities = [];
+    }
+
     // TODO push the selected city to the array and save here
+    app.selectedCities.push({key: key, label: label});
+    app.saveForage();
+
+    app.getForecast(key, label);
     app.toggleAddDialog(false);
   });
 
@@ -166,6 +174,19 @@
     var url = 'https://query.yahooapis.com/v1/public/yql?format=json&q=' +
         statement;
     // TODO add cache logic here
+    if ('caches' in window) {
+      caches.match(url).then(function(response) {
+        if (response) {
+          response.json().then(function updateFromCache(json) {
+            var results = json.query.results;
+            results.key = key;
+            results.label = label;
+            results.created = json.query.created;
+            app.updateForecastCard(results);
+          });
+        }
+      });
+    }
 
     // Fetch the latest data.
     var request = new XMLHttpRequest();
@@ -197,6 +218,15 @@
   };
 
   // TODO add saveSelectedCities function here
+  app.saveForage=function(){
+    localforage.setItem('selectedCities',app.selectedCities)
+    .then(function(value){
+      console.log('Save data: '+value);
+    })
+    .catch(function(error){
+      console.log('Saving data failed: '+error);
+    })
+  }
 
   app.getIconClass = function(weatherCode) {
     // Weather codes: https://developer.yahoo.com/weather/documentation.html#codes
@@ -303,9 +333,34 @@
     }
   };
   // TODO uncomment line below to test app with fake data
-  //app.updateForecastCard(initialWeatherForecast);
+  // app.updateForecastCard(initialWeatherForecast);
+  app.getForage=function(){
+    localforage.getItem('selectedCities')
+    .then(function(value){
+      console.log(value);
+      if(value){
+        app.selectedCities=value;
+        app.selectedCities.forEach(function(city){
+          app.getForecast(city.key,city.label);
+        })
+      }else{
+        app.selectedCities = [{key: initialWeatherForecast.key, label: initialWeatherForecast.label}];
+        app.updateForecastCard(initialWeatherForecast);
+        app.saveForage()
+      }
+    })
+    .catch(function(error){
+      console.log('Getting data failed: '+error);
+    })
+  }
+  app.getForage();
 
   // TODO add startup code here
 
   // TODO add service worker code here
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker
+      .register('./service-worker.js')
+      .then(function() { console.log('Service Worker Registered'); });
+  }
 })();
